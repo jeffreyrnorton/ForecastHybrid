@@ -1,37 +1,37 @@
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-import pandas as pd
-import numpy as np
-import frequency
+from ForecastHybrid.frequency import frequency
 
 
 class Arima:
-    def __init__(self, ts=None):
-        p = d = q = 0
-        r_arima = None
-        fitted = None
-        forecast = None
+    def __init__(self, timeseries):
+        self.ts = timeseries
+        self.p = self.d = self.q = 0
+        self.r_arima = None
+        self.fitted = None
+        self.forecast = None
         pandas2ri.activate()
         ro.r('library(forecast)')
-        if ts is not None:
-            self.fit(ts)
 
 
     def __del__(self):
         pandas2ri.deactivate()
 
 
-    def fit(self, ts, d = None, D = None, maxp = 5, maxq = 5, maxP = 2,
+    def fit(self, d = None, D = None, maxp = 5, maxq = 5, maxP = 2,
         maxQ = 2, maxorder = 5, maxd = 2, maxD = 1, startp = 2,
         startq = 2, startP = 1, startQ = 1, stationary = False,
         seasonal = True, ic = ["aicc", "aic", "bic"], stepwise = True,
-        trace = False, approximation = (len(ts) > 150 | frequency(x) > 12),
+        trace = False, approximation = None,
         truncate = None, xreg = None, test = ["kpss", "adf", "pp"],
         seasonaltest = ["ocsb", "ch"], allowdrift = True, allowmean = True,
-        lambdav = None, biasadj = False, parallel = False, numcores = 2, x = ts):
+        lambdav = None, biasadj = False, parallel = False, numcores = 2):
+
+        if( approximation is None):
+            approximation = len(self.ts) > 150 | frequency(self.ts) > 12
 
         # Convert the Python time series to an R time series
-        rdf = pandas2ri.py2ri(ts)
+        rdf = pandas2ri.py2ri(self.ts)
         ro.globalenv['r_timeseries'] = rdf
         # Fit the time series
         self.r_arima = ro.r('auto.arima(r_timeseries)')
@@ -60,11 +60,3 @@ class Arima:
         ro.globalenv['r_forecast'] = r_forecast
 #pred = ro.r('as.data.frame(r_forecast)')
 #
-
-
-rng = pd.date_range('1/1/2011', periods=72, freq='H')
-ts = pd.Series(np.random.randn(len(rng)), index=rng)
-
-ar = Arima()
-ar.fit(ts)
-ar.forecast()
