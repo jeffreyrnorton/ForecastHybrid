@@ -13,5 +13,6 @@ rng = pd.date_range('1/1/2011', periods=72, freq='H')
 ts = pd.Series(np.random.randn(len(rng)), index=rng)
 
 ar = Arima.Arima(ts)
-print(ar.fit())
-print(ar.forecast())
+ar.fit()
+sot = ar.forecast()
+a = 44

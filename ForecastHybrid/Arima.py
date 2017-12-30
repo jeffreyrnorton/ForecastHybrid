@@ -1,21 +1,13 @@
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
+import ForecastHybrid.ForecastCurve as ForecastCurve
 import ForecastHybrid.frequency
-import numpy as np
 
 
-class Arima:
+class Arima(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
-        self.ts = timeseries
+        super().__init__(timeseries)
         self.p = self.d = self.q = None
-        self.r_arima = None
-        self.fitted = None
-        self.forecasted = None
-        pandas2ri.activate()
-        ro.r('library(forecast)')
-
-    def __del__(self):
-        pandas2ri.deactivate()
 
     def fit(self, d = None, D = None, maxp = 5, maxq = 5, maxP = 2,
             maxQ = 2, maxorder = 5, maxd = 2, maxD = 1, startp = 2,
@@ -34,67 +26,71 @@ class Arima:
         # Create a call string setting variables as necessary
         ro.globalenv['r_timeseries'] = rdf
         command = 'auto.arima(r_timeseries'
-        if d is not None:
-            ro.globalenv['d'] = d
-            command += ', d=d'
-        if D is not None:
-            ro.globalenv['D'] = D
-            command += ', D=D'
+
+        ro.globalenv['d'] = ro.rinterface.NA_Integer if d is None else d
+        ro.globalenv['D'] = ro.rinterface.NA_Integer if D is None else D
+        command += ', d=d, D=D'
 
         ro.globalenv['max.p'] = maxp
-        command += ', max.p=max.p'
-
         ro.globalenv['max.q'] = maxq
-        command += ', max.q=max.q'
-
         ro.globalenv['max.P'] = maxP
-        command += ', max.P=max.P'
-
         ro.globalenv['max.Q'] = maxQ
-        command += ', max.Q=max.Q'
-
         ro.globalenv['max.order'] = maxorder
-        command += ', max.order=max.order'
 
-        ro.globalenv['max.d'] = maxd
-        command += ', max.d=max.d'
+        command += ', max.p=max.p, max.q=max.q, max.P=max.P, max.Q=max.Q, max.order=max.order'
 
-        ro.globalenv['max.D'] = maxD
-        command += ', max.D=max.D'
-
+        ro.globalenv['max.d']   = maxd
+        ro.globalenv['max.D']   = maxD
         ro.globalenv['start.p'] = startp
-        command += ', start.p=start.p'
-
         ro.globalenv['start.q'] = startq
-        command += ', start.q=start.q'
-
         ro.globalenv['start.P'] = startP
-        command += ', start.P=start.P'
-
         ro.globalenv['start.Q'] = startQ
-        command += ', start.Q=start.Q'
 
-        ro.globalenv['stationary'] = 'TRUE' if stationary else 'FALSE'
+        command += ", max.d=max.d, max.D=max.D, start.p=start.p, start.q=start.q, start.P=start.P, start.Q=start.Q"
+
+        ro.globalenv['stationary'] = ro.rinterface.TRUE if stationary else ro.rinterface.FALSE
         command += ', stationary=stationary'
 
-        ro.globalenv['seasonal'] = 'TRUE' if seasonal else 'FALSE'
+        ro.globalenv['seasonal'] = ro.rinterface.TRUE if seasonal else ro.rinterface.FALSE
         command += ', seasonal=seasonal'
 
+        ic_s = "aic" if len(ic) > 1 else ic
+        ro.globalenv['ic'] = ic_s
+        ro.globalenv['stepwise'] = ro.rinterface.TRUE if stepwise else ro.rinterface.FALSE
+        ro.globalenv['trace'] = ro.rinterface.TRUE if trace else ro.rinterface.FALSE
+        ro.globalenv['approximation'] = ro.rinterface.TRUE if approximation else ro.rinterface.FALSE
+        ro.globalenv['truncate'] = ro.rinterface.NA_Logical if truncate is None else\
+            ro.rinterface.TRUE if truncate else ro.rinterface.FALSE
+
+        command += ', ic=ic, stepwise=stepwise, trace=trace, approximation=approximation, truncate=truncate'
+
+        # Currently not supporting xreg, test, or seasonal.test.  These tend to act poorly
+        # when set and need a lot of tender care - let the underlying algorithm take care of it.
+        #
+        #ro.globalenv['xreg'] = ro.rinterface.NA_Real if xreg is None else pandas2ri.ri2py(xreg)
+        #ro.globalenv['test'] = ro.rinterface.NA_Character if len(test) > 1 else test
+        #ro.globalenv['seasonal.test'] = ro.rinterface.NA_Character if len(seasonaltest) > 1 else seasonaltest
+        ro.globalenv['allowdrift'] = ro.rinterface.TRUE if allowdrift else ro.rinterface.FALSE
+
+        command += ", allowdrift=allowdrift"
+
+        ro.globalenv['allowmean'] = ro.rinterface.TRUE if allowmean else ro.rinterface.FALSE
+        # Also dropping support for lambda at this point and letting the algorithm do its thing
+        #ro.globalenv['lambda'] = ro.rinterface.NA_Real if lambdav is None else lambdav
+        ro.globalenv['biasadj'] = ro.rinterface.TRUE if biasadj else ro.rinterface.FALSE
+        ro.globalenv['parallel'] = ro.rinterface.TRUE if parallel else ro.rinterface.FALSE
+        ro.globalenv['num.cores'] = numcores
+
+        command += ', allowmean=allowmean, biasadj=biasadj, parallel=parallel, num.cores=num.cores'
         command += ')'
 
         # Fit the time series
-        self.r_arima = ro.r(command)
-        ro.globalenv['r_arima'] = self.r_arima
+        self.r_forecastobject = ro.r(command)
+        ro.globalenv['r_forecastobject'] = self.r_forecastobject
         # Fitted points
-        self.fitted = ro.r('fitted(r_arima)').ravel() # numpy.ndarray (unraveled to 1D)
+        self.fitted = ro.r('fitted(r_forecastobject)').ravel() # numpy.ndarray (unraveled to 1D)
         # Orders
-        [self.p, self.d, self.q] = ro.r('arimaorder(r_arima)').ravel() # numpy.ndarray
+        [self.p, self.d, self.q] = ro.r('arimaorder(r_forecastobject)').ravel() # numpy.ndarray
         return self.fitted
 
-    def forecast(self, h=5):
-        # Forecast some h ahead
-        sr_forecast = 'forecast(r_arima, h={})'.format(h)
-        self.forecasted = np.array(ro.r(sr_forecast).rx)
-        #ro.globalenv['r_forecast'] = r_forecast
-        return self.forecasted
 
