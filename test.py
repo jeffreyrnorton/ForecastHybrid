@@ -9,10 +9,18 @@ from ForecastHybrid import Arima
 import pandas as pd
 import numpy as np
 
-rng = pd.date_range('1/1/2011', periods=72, freq='H')
-ts = pd.Series(np.random.randn(len(rng)), index=rng)
+# Read a csv in python...
+bikeData = pd.read_csv('/home/osboxes/Documents/day.csv')
+bikeData.temp = bikeData.temp.astype('float')
+bikeData.dteday = pd.to_datetime(bikeData.dteday)
+ts = pd.Series(index=bikeData.dteday, data=bikeData.temp.values)
 
 ar = Arima.Arima(ts)
 ar.fit()
 sot = ar.forecast()
-a = 44
+
+from ForecastHybrid import ets
+ets = ets.ets(ts)
+ets.fit()
+etsot = ets.forecast()
+a=44
