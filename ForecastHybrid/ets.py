@@ -8,7 +8,6 @@ import sys
 class ets(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
         super().__init__(timeseries)
-        self.p = self.d = self.q = None
 
     def fit(self, model='ZZZ', damped=None, alpha=None, beta=None,
             gamma=None, phi=None, additive_only=False, lambdal=None,

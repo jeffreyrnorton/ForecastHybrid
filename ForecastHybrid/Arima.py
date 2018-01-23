@@ -1,7 +1,6 @@
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import ForecastHybrid.ForecastCurve as ForecastCurve
-import ForecastHybrid.frequency
 import logging
 import sys
 
@@ -22,13 +21,13 @@ class Arima(ForecastCurve.ForecastCurve):
             seasonaltest = ["ocsb", "ch"], allowdrift = True, allowmean = True,
             lambdav = None, biasadj = False, parallel = False, numcores = 2):
 
-        if approximation is None:
-            approximation = len(self.ts) > 150 | ForecastHybrid.frequency.frequency(self.ts) > 12
-
         # Convert the Python time series to an R time series
         rdf = pandas2ri.py2ri(self.ts)
         # Create a call string setting variables as necessary
         ro.globalenv['r_timeseries'] = rdf
+        if approximation is None:
+            rapprox = ro.r("length(r_timeseries) > 150 | frequency(r_timeseries) > 12").ravel()
+            approximation = bool(rapprox[0] == 1)
         command = 'auto.arima(r_timeseries'
         self.fitted = None
 
@@ -64,7 +63,7 @@ class Arima(ForecastCurve.ForecastCurve):
             ro.globalenv['trace'] = ro.rinterface.TRUE if trace else ro.rinterface.FALSE
             ro.globalenv['approximation'] = ro.rinterface.TRUE if approximation else ro.rinterface.FALSE
             ro.globalenv['truncate'] = ro.rinterface.NULL if truncate is None else\
-                  ro.rinterface.TRUE if truncate else ro.rinterface.FALSE
+                ro.rinterface.TRUE if truncate else ro.rinterface.FALSE
 
             command += ', ic=ic, stepwise=stepwise, trace=trace, approximation=approximation, truncate=truncate'
 
