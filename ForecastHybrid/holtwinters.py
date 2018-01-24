@@ -63,3 +63,10 @@ class holtwinters(ForecastCurve.ForecastCurve):
                 logging.error("Failure to fit data with HoltWinter")
 
         return self.fitted
+
+    def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
+                 findfrequency=False):
+        # Make the forecast
+        fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
+        self.forecasted = self.extractRFcst(fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5})
+        return self.forecasted

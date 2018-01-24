@@ -1,12 +1,8 @@
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import ForecastHybrid.ForecastCurve as ForecastCurve
-import ForecastHybrid.frequency
-import statsmodels.tsa.stattools as stattools
-import statsmodels.api as statapi
 import logging
-import scipy.stats
-import math
+
 
 
 class thetam(ForecastCurve.ForecastCurve):
@@ -71,5 +67,11 @@ class thetam(ForecastCurve.ForecastCurve):
         return self.fitted
 
 
+    def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
+                 findfrequency=False):
+        # Make the forecast
+        fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
+        self.forecasted = self.extractRFcst(fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5})
+        return self.forecasted
 
 

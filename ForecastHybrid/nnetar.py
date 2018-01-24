@@ -59,3 +59,11 @@ class nnetar(ForecastCurve.ForecastCurve):
         return self.fitted
 
 
+    def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
+                 findfrequency=False):
+        # Make the forecast
+        fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
+        self.forecasted = self.extractRFcst(fcst, indices={'fidx':15, 'nbands':None, 'lower':None, 'upper':None})
+        return self.forecasted
+
+
