@@ -1,10 +1,19 @@
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import numpy as np
+from rpy2.robjects import pandas2ri
+import statsmodels.api as sm
+from scipy.signal import welch
+import random
+import string
 import logging
+import rpy2.robjects as ro
+
 
 class ForecastCurve(object):
     def __init__(self, timeseries):
+        N = 8
+        self.rndstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(N))
         self.ts = timeseries
         self.r_forecastobject = None
         self.fitted = None
@@ -14,6 +23,61 @@ class ForecastCurve(object):
 
     def __del__(self):
         pandas2ri.deactivate()
+
+    def rtracebackerror(self):
+        return ro.r('toString(traceback(max.lines=1)[1])')[0]
+
+    def dumpRCommandEnv(self, command):
+        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            for ritem in ro.r.ls(ro.globalenv):
+                logging.debug('{}:{}'.format(ritem, ro.r[ritem]))
+            logging.debug('Running R command:{}'.format(command))
+
+    def setREnv(self, call, **kwargs):
+        command = '{}(r_timeseries'.format(call)
+        for key, item in kwargs.items():
+            if isinstance(item, bool):
+                ro.globalenv[key] = ro.rinterface.TRUE if item else ro.rinterface.FALSE
+            elif isinstance(item, list) and all(isinstance(x, float) for x in item):
+                ro.globalenv[key] = pandas2ri.FloatSexpVector(item)
+            elif isinstance(item, list) and all(isinstance(x, int) for x in item):
+                ro.globalenv[key] = pandas2ri.IntSexpVector(item)
+            elif isinstance(item, dict):
+                ro.globalenv[key] = ro.ListVector(item)
+            else:
+                try:
+                    ro.globalenv[key] = item
+                except:
+                    logging.error('Variable {} - Traceback - {}'.format(key, self.rtracebackerror()))
+
+            command += ", {}={}".format(key,key)
+        command += ")"
+        return command
+
+    def setTimeSeries(self, period=None):
+
+        # Convert the Python time series to an R time series
+        rdf = pandas2ri.py2ri(self.ts)
+        # Create a call string setting variables as necessary
+        ro.globalenv['r_timeseries'] = rdf
+
+        if period is None:
+            try:
+                # Decompose into STL
+                stl = sm.tsa.seasonal_decompose(self.ts)
+                # Use Welch to calculate period on seasonal part of time series
+                fs, Pxx = welch(stl.seasonal, fs=len(stl.seasonal), nperseg=len(stl.seasonal))
+                period = int(np.round(np.mean(np.ediff1d(np.asarray(fs)))))
+                # The above may not be correct - what we are trying to do is minimize AIC on fit
+            except Exception as e:
+                period = 1 # Safe, but cannot do STLM or other seasonal methods
+                ro.r('library(stats)')
+                period = ro.r('stl(r_timeseries)')
+                logging.warning(str(e))
+
+        # Add frequency to the time series - must be greater than 1 to make stlm work
+        command = 'r_timeseries <- ts(r_timeseries, frequency=' + str(period) + ')'
+        ro.r(command)
 
     def extractRFcst(self, fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5}):
         nprres = np.asarray(fcst)

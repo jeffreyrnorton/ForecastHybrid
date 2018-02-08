@@ -2,56 +2,32 @@ import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
-import sys
+import time
 
 
 class holtwinters(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
         super().__init__(timeseries)
 
-    def fit(self, alpha = None, beta = None, gamma = None, seasonal = ["additive", "multiplicative"],
-            start_periods = 2, l_start = None, b_start = None, s_start = None,
-            optim_start = {'alpha' : 0.3, 'beta' : 0.1, 'gamma' : 0.1}) :
+    def fitR(self, **kwargs):
+        ro.r("rm(list=ls())")
+        self.setTimeSeries(period=1)
+        command = self.setREnv("HoltWinter", **kwargs)
+        return self.fitKernel(command)
 
-        # Convert the Python time series to an R time series
-        rdf = pandas2ri.py2ri(self.ts)
-        # Create a call string setting variables as necessary
-        ro.globalenv['r_timeseries'] = rdf
-        command = 'HoltWinters(r_timeseries'
-        self.fitted = None
-
-        nperiods = ro.r("frequency(r_timeseries)")
-        nperiods = int(nperiods[0])
-        if nperiods < 2:
-            logging.error("Cannot fit HoltWinters on time series with less than 2 periods")
-            return self.fitted
-
+    def fitKernel(self, command):
         try:
-            ro.globalenv['alpha'] = ro.rinterface.NULL if alpha is None else alpha
-            ro.globalenv['beta'] = ro.rinterface.NULL if beta is None else beta
-            ro.globalenv['gamma'] = ro.rinterface.NULL if gamma is None else gamma
-            if len(seasonal) == 1:
-                ro.globalenv['seasonal'] = seasonal
-            else:
-                ro.globalenv['seasonal'] = 'additive'
-            ro.globalenv['start.periods'] = start_periods
-            ro.globalenv['l.start'] = ro.rinterface.NULL if l_start is None else l_start
-            ro.globalenv['b.start'] = ro.rinterface.NULL if b_start is None else b_start
-            ro.globalenv['s.start'] = ro.rinterface.NULL if s_start is None else s_start
-            ro.globalenv['optim.start'] = ro.ListVector(optim_start)
-            command += ', alpha=alpha, beta=beta, gamma=gamma, seasonal=seasonal, start.periods=start.periods'
-            command += ', l.start=l.start, b.start=b.start, s.start=s.start, optim.start=optim.start'
-            command += ')'
-
             # Fit the time series
+            self.dumpRCommandEnv(command)
+            start_time = time.time()
             self.r_forecastobject = ro.r(command)
+            logging.info("[R]holtwinters ran in {} sec".format(time.time() - start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel() # numpy.ndarray (unraveled to 1D)
+            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
             logging.info("HoltWinter fit successful")
         except:
-            print(sys.exc_info()[0])
-            logging.warning(sys.exc_info()[0])
+            logging.debug(self.rtracebackerror())
             logging.warning("Running HoltWinter without any arguments except for the time series")
             try:
                 command = 'HoltWinter(r_timeseries)'
@@ -63,6 +39,32 @@ class holtwinters(ForecastCurve.ForecastCurve):
                 logging.error("Failure to fit data with HoltWinter")
 
         return self.fitted
+
+    def fit(self, alpha = None, beta = None, gamma = None, seasonal = ["additive", "multiplicative"],
+            start_periods = 2, l_start = None, b_start = None, s_start = None,
+            optim_start = {'alpha' : 0.3, 'beta' : 0.1, 'gamma' : 0.1}) :
+
+        self.setTimeSeries(period=None)
+
+        nperiods = ro.r("frequency(r_timeseries)")
+        nperiods = int(nperiods[0])
+        if nperiods < 2:
+            logging.error("Cannot fit HoltWinters on time series with less than 2 periods")
+            return self.fitted
+
+        aargs = {}
+        if alpha is not None: aargs['alpha'] = alpha
+        if beta is not None: aargs['beta'] = beta
+        if gamma is not None: aargs['gamma'] = gamma
+        if isinstance(seasonal, list): aargs['seasonal'] = 'additive'
+        else: aargs['seasonal'] = seasonal
+        aargs['start.periods'] = start_periods
+        if l_start is not None: aargs['l.start'] = l_start
+        if b_start is not None: aargs['b.start'] = b_start
+        if s_start is not None: aargs['s_start'] = s_start
+        aargs['optim.start'] = optim_start
+        return self.fitR(**aargs)
+
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
                  findfrequency=False):
