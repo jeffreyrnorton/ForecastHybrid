@@ -111,6 +111,7 @@ from ForecastHybrid import nnetar
 from ForecastHybrid import tbats
 from ForecastHybrid import stlm
 from ForecastHybrid import holtwinters
+from ForecastHybrid import cvts
 
 
 def arima_worker(ts, aargs):
@@ -300,85 +301,111 @@ class HybridForecast(ForecastCurve.ForecastCurve):
                 atomic_arguments['t'].update({'use.parallel':True, 'num.cores':ncpus})
             extra_cpus -= ncpus
 
-        itlist = list()
-        if 't' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 't'))
-        if 'n' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 'n'))
-        if 'a' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 'a'))
-        if 'e' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 'e'))
-        if 'f' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 'f'))
-        if 's' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 's'))
-        if 'h' in expanded_models:
-            itlist.append((self.ts, atomic_arguments, 'h'))
+        if weights == 'equals' or weights == 'errors':
 
-        # Initial fit of all models in parallel!
-        pool = multiprocessing.Pool(processes=len(itlist))
-        self.model_results = pool.starmap(all_workers, itlist)
-        pool.close()
+            itlist = list()
+            if 't' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 't'))
+            if 'n' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 'n'))
+            if 'a' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 'a'))
+            if 'e' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 'e'))
+            if 'f' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 'f'))
+            if 's' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 's'))
+            if 'h' in expanded_models:
+                itlist.append((self.ts, atomic_arguments, 'h'))
 
-        # Turn the array in model results into a dictionary (map) and extract even weighting...
-        # Also, sometimes we are going to get NaNs so we are going to have to work with a dataframe
-        # and handle each observation separately.
-        temp = dict()
-        df = pd.DataFrame()
-        for i in range(0, len(self.model_results)):
-            temp.update({self.model_results[i][0]:self.model_results[i][1]})
-            df = pd.concat([df, pd.DataFrame(self.model_results[i][1].fitted)], axis=1, ignore_index=True)
-        self.fitted = np.ndarray(shape=[len(self.ts),1])
-        self.model_results = temp
+            # Initial fit of all models in parallel!
+            pool = multiprocessing.Pool(processes=len(itlist))
+            self.model_results = pool.starmap(all_workers, itlist)
+            pool.close()
 
-        if weights == 'equal':
+            # Turn the array in model results into a dictionary (map) and extract even weighting...
+            # Also, sometimes we are going to get NaNs so we are going to have to work with a dataframe
+            # and handle each observation separately.
+            temp = dict()
+            df = pd.DataFrame()
+            for i in range(0, len(self.model_results)):
+                temp.update({self.model_results[i][0]:self.model_results[i][1]})
+                df = pd.concat([df, pd.DataFrame(self.model_results[i][1].fitted)], axis=1, ignore_index=True)
+            self.fitted = np.ndarray(shape=[len(self.ts),1])
+            self.model_results = temp
 
-            for i in range(0, df.shape[0]):
-                good_row_data = df.ix[i].dropna()
-                if len(good_row_data) > 0:
-                    weights = np.ndarray(shape=(len(good_row_data),1))
-                    weights.fill(1.0/len(good_row_data))
-                    self.fitted[i] = np.dot(good_row_data, weights)
-                else:
-                    self.fitted[i] = np.NaN
+            if weights == 'equal':
 
-        else:
-            # Measure the error - using some error measure between self.ts and df[,i]
-            # ['MAE', 'MSE', 'MSLE', 'MEAE']
-            column_errors = list()
-            for i in range(0, df.shape[1]):
-                fitted_value = df[df.columns[i]]
-                if error_method == 'MAE':
-                    column_errors.append(metrics.mean_absolute_error(self.ts.values[fitted_value.isna()==False],
-                                                                     fitted_value[fitted_value.isna()==False]))
-                elif error_method == 'MSE':
-                    column_errors.append(metrics.mean_squared_error(self.ts.values[fitted_value.isna()==False],
-                                                                    fitted_value[fitted_value.isna()==False]))
-                elif error_method == 'RMSE':
-                    column_errors.append(math.sqrt(metrics.mean_squared_error(self.ts.values[fitted_value.isna()==False],
-                                                                    fitted_value[fitted_value.isna()==False])))
-                elif error_method == 'MSLE':
-                    column_errors.append(metrics.mean_squared_log_error(self.ts.values[fitted_value.isna()==False],
+                for i in range(0, df.shape[0]):
+                    good_row_data = df.ix[i].dropna()
+                    if len(good_row_data) > 0:
+                        weights = np.ndarray(shape=(len(good_row_data),1))
+                        weights.fill(1.0/len(good_row_data))
+                        self.fitted[i] = np.dot(good_row_data, weights)
+                    else:
+                        self.fitted[i] = np.NaN
+
+            else:
+                # Measure the error - using some error measure between self.ts and df[,i]
+                # ['MAE', 'MSE', 'MSLE', 'MEAE']
+                column_errors = list()
+                for i in range(0, df.shape[1]):
+                    fitted_value = df[df.columns[i]]
+                    if error_method == 'MAE':
+                        column_errors.append(metrics.mean_absolute_error(self.ts.values[fitted_value.isna()==False],
+                                                                         fitted_value[fitted_value.isna()==False]))
+                    elif error_method == 'MSE':
+                        column_errors.append(metrics.mean_squared_error(self.ts.values[fitted_value.isna()==False],
                                                                         fitted_value[fitted_value.isna()==False]))
-                elif error_method == 'MEAE':
-                    column_errors.append(metrics.median_absolute_error(self.ts.values[fitted_value.isna() == False],
-                                                                        fitted_value[fitted_value.isna() == False]))
-            tweights = 1.0/np.asarray(column_errors)
-            weightsnorm = np.linalg.norm(tweights, ord=1)
-            weights = tweights/weightsnorm
-            # Hybrid weighting which handles NaNs in rows
-            for i in range(0, df.shape[0]):
-                good_row_data = df.ix[i].dropna()
-                # Use properly weighted if we have all the data.
-                if len(good_row_data) == len(weights):
-                    self.fitted[i] = np.dot(good_row_data, weights)
-                # if we don't have all the data, weight equally - TODO - change to weighted on good values!
-                elif len(good_row_data) > 0:
-                    stweights = tweights[df.ix[i].isna() == False]
-                    stweightsn = np.linalg.norm(stweights, ord=1)
-                    self.fitted[i] = np.dot(good_row_data, stweights/stweightsn)
-                else:
-                    self.fitted[i] = np.NaN
+                    elif error_method == 'RMSE':
+                        column_errors.append(math.sqrt(metrics.mean_squared_error(self.ts.values[fitted_value.isna()==False],
+                                                                        fitted_value[fitted_value.isna()==False])))
+                    elif error_method == 'MSLE':
+                        column_errors.append(metrics.mean_squared_log_error(self.ts.values[fitted_value.isna()==False],
+                                                                            fitted_value[fitted_value.isna()==False]))
+                    elif error_method == 'MEAE':
+                        column_errors.append(metrics.median_absolute_error(self.ts.values[fitted_value.isna() == False],
+                                                                            fitted_value[fitted_value.isna() == False]))
+                tweights = 1.0/np.asarray(column_errors)
+                weightsnorm = np.linalg.norm(tweights, ord=1)
+                weights = tweights/weightsnorm
+                # Hybrid weighting which handles NaNs in rows
+                for i in range(0, df.shape[0]):
+                    good_row_data = df.ix[i].dropna()
+                    # Use properly weighted if we have all the data.
+                    if len(good_row_data) == len(weights):
+                        self.fitted[i] = np.dot(good_row_data, weights)
+                    # if we don't have all the data, weight equally - TODO - change to weighted on good values!
+                    elif len(good_row_data) > 0:
+                        stweights = tweights[df.ix[i].isna() == False]
+                        stweightsn = np.linalg.norm(stweights, ord=1)
+                        self.fitted[i] = np.dot(good_row_data, stweights/stweightsn)
+                    else:
+                        self.fitted[i] = np.NaN
+
+        else: # cv.errors
+            itlist = list()
+            if 't' in expanded_models:
+                itlist.append((self.ts, tbats.tbats, atomic_arguments, 't', 84, 2, 'MSLE'))
+            if 'n' in expanded_models:
+                itlist.append((self.ts, nnetar.nnetar, atomic_arguments, 'n', 84, 2, 'MSLE'))
+            if 'a' in expanded_models:
+                itlist.append((self.ts, Arima.Arima, atomic_arguments, 'a', 84, 2, 'MSLE'))
+            if 'e' in expanded_models:
+                itlist.append((self.ts, ets.ets, atomic_arguments, 'e', 84, 2, 'MSLE'))
+            if 'f' in expanded_models:
+                itlist.append((self.ts, thetam.thetam, atomic_arguments, 'f', 84, 2, 'MSLE'))
+            if 's' in expanded_models:
+                itlist.append((self.ts, stlm.stlm, atomic_arguments, 's', 84, 2, 'MSLE'))
+            if 'h' in expanded_models:
+                itlist.append((self.ts, holtwinters.holtwinters, atomic_arguments, 'h', 84, 2, 'MSLE'))
+
+#def cvts(x, FUN, args, window_size=84, num_cores=2, error_method='MSLE'):
+
+            for theargs in itlist:
+                rr = cvts.cvts(theargs[0], theargs[1], theargs[2], theargs[3], theargs[4], theargs[5], theargs[6])
+                asdf = 4
+                ##cvts.cvts()
 
 

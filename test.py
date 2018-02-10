@@ -25,21 +25,27 @@ tsl = pd.Series(index=accdata.time, data=accdata.USAccDeaths.values)
 
 logging.basicConfig(filename='logging.log', level=logging.DEBUG)
 
+# Writing cvts
+from ForecastHybrid import cvts
+
+#bestres = cvts.cvts(ts, Arima.Arima)
+#bestres['model'].refit(ts)
+
 # MSLE looks best for this case
 from ForecastHybrid import HybridForecast
 fh = HybridForecast.HybridForecast(ts)
-fh.fit(atomic_arguments={'a':{'parallel':False}}, weights='equal', error_method='MSE')
-err1 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-fh.fit(weights='cv.errors', error_method='MSE')
-err2 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-fh.fit(weights='cv.errors', error_method='MAE')
-err3 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-fh.fit(weights='cv.errors', error_method='MSLE')
-err4 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-fh.fit(weights='cv.errors', error_method='MEAE')
-err5 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-fh.fit(weights='cv.errors', error_method='RMSE')
-err6 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+fh.fit(atomic_arguments={'a':{'parallel':False}}, weights='cv.errors', error_method='MSE')
+# err1 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+# fh.fit(weights='cv.errors', error_method='MSE')
+# err2 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+# fh.fit(weights='cv.errors', error_method='MAE')
+# err3 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+# fh.fit(weights='cv.errors', error_method='MSLE')
+# err4 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+# fh.fit(weights='cv.errors', error_method='MEAE')
+# err5 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+# fh.fit(weights='cv.errors', error_method='RMSE')
+# err6 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
 
 asffasdafdsa = 4
 

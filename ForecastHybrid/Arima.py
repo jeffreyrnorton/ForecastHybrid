@@ -2,6 +2,9 @@ import rpy2.robjects as ro
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
 import time
+from rpy2.robjects import pandas2ri
+import numpy as np
+
 
 # Arima is a wrapper on the R function auto.arima
 #
@@ -61,6 +64,31 @@ class Arima(ForecastCurve.ForecastCurve):
             rapprox = ro.r("length(r_timeseries) > 150 | frequency(r_timeseries) > 12").ravel()
             approximation = bool(rapprox[0] == 1)
 
+        aargs = self.convertArgsToR(d, D, maxp, maxq, maxP, maxQ, maxorder,
+                                    maxd, maxD, startp, startq, startP, startQ,
+                                    stationary, seasonal, ic, stepwise, trace,
+                                    approximation, truncate, xreg, test, seasonaltest,
+                                    allowdrift, allowmean, lambdav, biasadj, parallel, numcores)
+        command = self.setREnv("auto.arima", **aargs)
+
+        return self.fitKernel(command)
+
+    def convertArgsToR(self, d = None, D = None, maxp = 5, maxq = 5, maxP = 2,
+            maxQ = 2, maxorder = 5, maxd = 2, maxD = 1, startp = 2,
+            startq = 2, startP = 1, startQ = 1, stationary = False,
+            seasonal = True, ic = ['aicc', 'aic', 'bic'], stepwise = True,
+            trace = False, approximation = None,
+            truncate = None, xreg = None, test = ["kpss", "adf", "pp"],
+            seasonaltest = ["ocsb", "ch"], allowdrift = True, allowmean = True,
+            lambdav = None, biasadj = False, parallel = False, numcores = 2):
+
+        ro.r("rm(list=ls())")
+
+        self.setTimeSeries(period=1)
+        if approximation is None:
+            rapprox = ro.r("length(r_timeseries) > 150 | frequency(r_timeseries) > 12").ravel()
+            approximation = bool(rapprox[0] == 1)
+
         aargs = {}
         if d is not None: aargs['d'] = d
         if D is not None: aargs['D'] = D
@@ -96,9 +124,7 @@ class Arima(ForecastCurve.ForecastCurve):
         aargs['biasadj'] = biasadj
         aargs['parallel'] = parallel
         aargs['num.cores'] = numcores
-        command = self.setREnv("auto.arima", **aargs)
-
-        return self.fitKernel(command)
+        return aargs
 
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
@@ -107,3 +133,18 @@ class Arima(ForecastCurve.ForecastCurve):
         fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
         self.forecasted = self.extractRFcst(fcst, indices={'fidx':3, 'nbands':2, 'lower':4, 'upper':5})
         return self.forecasted
+
+
+    def refit(self, ts):
+        # Go ahead and reset the data and the model
+        rdf = pandas2ri.py2ri(ts)
+        # Create a call string setting variables as necessary
+        arr = np.array(self.r_forecastobject)
+        ro.r("library(forecast)")
+        ro.globalenv['rts'] = rdf
+        ro.globalenv['arimamod'] = self.r_forecastobject
+        refitR = ro.r("Arima(y=rts, model=arimamod)")
+        self.r_forecastobject = refitR
+        ro.globalenv['r_forecastobject'] = refitR
+        self.fitted = ro.r('fitted(r_forecastobject)')
+        return self.fitted
