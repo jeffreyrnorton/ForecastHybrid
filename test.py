@@ -23,29 +23,31 @@ accdata = pd.read_csv('/home/osboxes/Documents/USAccDeaths.csv')
 accdata.USAccDeaths = accdata.USAccDeaths.astype('float')
 tsl = pd.Series(index=accdata.time, data=accdata.USAccDeaths.values)
 
-logging.basicConfig(filename='logging.log', level=logging.DEBUG)
+logging.basicConfig(filename='logging.log', level=logging.INFO)
 
-# Writing cvts
-from ForecastHybrid import cvts
+import matplotlib
+#tsl.plot()
 
-#bestres = cvts.cvts(ts, Arima.Arima)
-#bestres['model'].refit(ts)
 
 # MSLE looks best for this case
 from ForecastHybrid import HybridForecast
-fh = HybridForecast.HybridForecast(ts)
-fh.fit(atomic_arguments={'a':{'parallel':False}}, weights='cv.errors', error_method='MSE')
-# err1 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-# fh.fit(weights='cv.errors', error_method='MSE')
-# err2 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-# fh.fit(weights='cv.errors', error_method='MAE')
-# err3 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-# fh.fit(weights='cv.errors', error_method='MSLE')
-# err4 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-# fh.fit(weights='cv.errors', error_method='MEAE')
-# err5 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
-# fh.fit(weights='cv.errors', error_method='RMSE')
-# err6 = math.sqrt(metrics.mean_squared_error(np.asarray(ts), fh.fitted))
+
+print("MODEL: bike")
+for errormodel in ["MAE", "MSE", "MSLE", "MEAE", "RSME"]:
+    for weightmodel in ['equal', 'errors', 'cv.errors']:
+        fh = HybridForecast.HybridForecast(ts)
+        fitted = fh.fit(weights=weightmodel, error_method=errormodel, models="aefnt")
+        equal_error = fh.error('RMSE')
+        print('Error Model {}, Weight Model {}, RMSE total error = {}'.format(errormodel, weightmodel, equal_error['error']))
+
+print("PERIODIC MODEL: accident")
+for errormodel in ["MAE", "MSE", "MSLE", "MEAE", "RSME"]:
+    for weightmodel in ['equal', 'errors']:#, 'cv.errors']:
+        fh = HybridForecast.HybridForecast(tsl)
+        fitted = fh.fit(weights=weightmodel, error_method=errormodel, period=12)
+        equal_error = fh.error('RMSE')
+        print('Error Model {}, Weight Model {}, RMSE total error = {}'.format(errormodel, weightmodel, equal_error['error']))
+
 
 asffasdafdsa = 4
 
@@ -55,27 +57,25 @@ if ar.fit() is not None:
     print(ar.forecast())
 ar.fitR(**{'parallel':True, 'num.cores':4})
 
+
+print("STLM")
+from ForecastHybrid import stlm
+stlm1 = stlm.stlm(tsl)
+if stlm1.fit(period=12) is not None:
+    print(stlm1.forecast())
+
+print("HoltWinters")
+from ForecastHybrid import holtwinters
+hw = holtwinters.holtwinters(tsl)
+if hw.fitR(**{'period':12}) is not None:
+    print(hw.forecast())
+
 print("ETS")
 from ForecastHybrid import ets
 ets = ets.ets(ts)
 if ets.fit() is not None:
     print(ets.forecast())
 ets.fitR(**{'model':'ZZZ'})
-
-print("THETAM")
-from ForecastHybrid import thetam
-theta = thetam.thetam(ts)
-if theta.fit() is not None:
-    print(theta.forecast())
-
-print("STLM")
-from ForecastHybrid import stlm
-stlm1 = stlm.stlm(ts)
-if stlm1.fit() is not None:
-    print(stlm1.forecast())
-stlm2 = stlm.stlm(tsl)
-if stlm2.fit() is not None:
-    print(stlm2.forecast())
 
 print("TBATS")
 from ForecastHybrid import tbats
@@ -89,11 +89,12 @@ nn = nnetar.nnetar(ts)
 if nn.fit() is not None:
     print(nn.forecast())
 
-print("HoltWinters")
-from ForecastHybrid import holtwinters
-hw = holtwinters.holtwinters(ts)
-if hw.fit() is not None:
-    print(hw.forecast())
+print("THETAM")
+from ForecastHybrid import thetam
+theta = thetam.thetam(ts)
+if theta.fit() is not None:
+    print(theta.forecast())
+    theta.refit(ts)
 
 
 

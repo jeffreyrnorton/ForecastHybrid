@@ -3,6 +3,7 @@ from rpy2.robjects import pandas2ri
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
 import time
+import numpy as np
 
 
 class nnetar(ForecastCurve.ForecastCurve):
@@ -43,6 +44,11 @@ class nnetar(ForecastCurve.ForecastCurve):
 
     def fit(self, P = 1, repeats = 20, xreg = None, lambday = None, model = None,
             subset = None, scale_inputs = True):
+        aargs = self.convertArgsToR(P, repeats, xreg, lambday, model, subset, scale_inputs)
+        return self.fitR(**aargs)
+
+    def convertArgsToR(self, P=1, repeats=20, xreg=None, lambday=None, model=None,
+            subset=None, scale_inputs=True):
 
             aargs = {}
             aargs['P'] = P
@@ -56,7 +62,7 @@ class nnetar(ForecastCurve.ForecastCurve):
             #aargs['model']
             #aargs['subset]
             aargs['scale.inputs'] = scale_inputs
-            return self.fitR(**aargs)
+            return aargs
 
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
@@ -66,4 +72,16 @@ class nnetar(ForecastCurve.ForecastCurve):
         self.forecasted = self.extractRFcst(fcst, indices={'fidx':15, 'nbands':None, 'lower':None, 'upper':None})
         return self.forecasted
 
-
+    def refit(self, ts):
+        # Go ahead and reset the data and the model
+        rdf = pandas2ri.py2ri(ts)
+        # Create a call string setting variables as necessary
+        arr = np.array(self.r_forecastobject)
+        ro.r("library(forecast)")
+        ro.globalenv['rts'] = rdf
+        ro.globalenv['nnetarmod'] = self.r_forecastobject
+        refitR = ro.r("nnetar(y=rts, model=nnetarmod)")
+        self.r_forecastobject = refitR
+        ro.globalenv['r_forecastobject'] = refitR
+        self.fitted = ro.r('fitted(r_forecastobject)')
+        return self.fitted

@@ -2,6 +2,8 @@ import rpy2.robjects as ro
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
 import time
+from rpy2.robjects import pandas2ri
+import numpy as np
 
 
 class ets(ForecastCurve.ForecastCurve):
@@ -10,7 +12,14 @@ class ets(ForecastCurve.ForecastCurve):
 
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
-        self.setTimeSeries(period=1)
+        rtperiod = 1
+        if kwargs.get('period', None) is not None:
+            try:
+                rtperiod = int(kwargs['period'])
+            except:
+                rtperiod = 1
+            kwargs.pop('period')
+        self.setTimeSeries(period=rtperiod)
         command = self.setREnv("ets", **kwargs)
         return self.fitKernel(command)
 
@@ -52,6 +61,18 @@ class ets(ForecastCurve.ForecastCurve):
 
         ro.r("rm(list=ls())")
         self.setTimeSeries(period=1)
+        aargs = self.convertArgsToR(model, damped, alpha, beta, gamma, phi, additive_only,
+                                    lambdal, biasadj, lower, upper, opt_crit, nmse, bounds, ic, restrict,
+                                    allow_multiplication_trend, use_initial_values)
+        command = self.setREnv("ets", **aargs)
+        return self.fitKernel(command)
+
+    def convertArgsToR(self, model='ZZZ', damped=None, alpha=None, beta=None,
+            gamma=None, phi=None, additive_only=False, lambdal=None,
+            biasadj=False, lower=[1.0e-4, 1.0e-4, 1.0e-4, 0.8], upper=[0.9999, 0.9999, 0.9999, 0.98],
+            opt_crit=['lik', 'amse', 'mse', 'sigma', 'mae'], nmse=3,
+            bounds=['both', 'usual', 'admissible'], ic=['aicc', 'aic', 'bic'],
+            restrict=True, allow_multiplication_trend=False, use_initial_values=False):
         aargs = {}
         aargs['model'] = model
         if damped is not None: aargs['damped'] = damped
@@ -74,10 +95,7 @@ class ets(ForecastCurve.ForecastCurve):
         aargs['restrict'] = restrict
         aargs['allow.multiplicative.trend'] = allow_multiplication_trend
         aargs['use.initial.values'] = use_initial_values
-        command = self.setREnv("ets", **aargs)
-
-        return self.fitKernel(command)
-
+        return aargs
 
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
@@ -86,3 +104,17 @@ class ets(ForecastCurve.ForecastCurve):
         fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
         self.forecasted = self.extractRFcst(fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5})
         return self.forecasted
+
+    def refit(self, ts):
+        # Go ahead and reset the data and the model
+        rdf = pandas2ri.py2ri(ts)
+        # Create a call string setting variables as necessary
+        arr = np.array(self.r_forecastobject)
+        ro.r("library(forecast)")
+        ro.globalenv['rts'] = rdf
+        ro.globalenv['etsmod'] = self.r_forecastobject
+        refitR = ro.r("ets(y=rts, model=etsmod)")
+        self.r_forecastobject = refitR
+        ro.globalenv['r_forecastobject'] = refitR
+        self.fitted = ro.r('fitted(r_forecastobject)')
+        return self.fitted

@@ -2,6 +2,8 @@ import rpy2.robjects as ro
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
 import time
+from rpy2.robjects import pandas2ri
+import numpy as np
 
 
 class tbats(ForecastCurve.ForecastCurve):
@@ -44,6 +46,17 @@ class tbats(ForecastCurve.ForecastCurve):
             seasonal_periods = None, use_arma_errors = True,
             use_parallel = None, num_cores = 2, bc_lower = 0,
             bc_upper = 1, biasadj = False):
+        aargs = self.convertArgsToR(use_box_cox, use_trend, use_damped_trend,
+                                    seasonal_periods, use_arma_errors,
+                                    use_parallel, num_cores, bc_lower,
+                                    bc_upper, biasadj)
+        return self.fitR(**aargs)
+
+
+    def convertArgsToR(self, use_box_cox=None, use_trend=None, use_damped_trend=None,
+            seasonal_periods=None, use_arma_errors=True,
+            use_parallel=None, num_cores=2, bc_lower=0,
+            bc_upper=1, biasadj=False):
 
         aargs = {}
         if use_parallel is None:
@@ -59,9 +72,7 @@ class tbats(ForecastCurve.ForecastCurve):
         aargs['bc.lower'] = bc_lower
         aargs['bc.upper'] = bc_upper
         aargs['biasadj'] = biasadj
-
-        return self.fitR(**aargs)
-
+        return aargs
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
                  findfrequency=False):
@@ -69,3 +80,17 @@ class tbats(ForecastCurve.ForecastCurve):
         fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
         self.forecasted = self.extractRFcst(fcst, indices={'fidx':1, 'nbands':2, 'lower':6, 'upper':5})
         return self.forecasted
+
+    def refit(self, ts):
+        # Go ahead and reset the data and the model
+        rdf = pandas2ri.py2ri(ts)
+        # Create a call string setting variables as necessary
+        arr = np.array(self.r_forecastobject)
+        ro.r("library(forecast)")
+        ro.globalenv['rts'] = rdf
+        ro.globalenv['tbatsmod'] = self.r_forecastobject
+        refitR = ro.r("tbats(y=rts, model=tbatsmod)")
+        self.r_forecastobject = refitR
+        ro.globalenv['r_forecastobject'] = refitR
+        self.fitted = ro.r('fitted(r_forecastobject)')
+        return self.fitted

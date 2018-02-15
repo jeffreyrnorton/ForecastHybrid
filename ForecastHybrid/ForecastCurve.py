@@ -12,8 +12,6 @@ import rpy2.robjects as ro
 
 class ForecastCurve(object):
     def __init__(self, timeseries):
-        N = 8
-        self.rndstr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(N))
         self.ts = timeseries
         self.r_forecastobject = None
         self.fitted = None
@@ -127,3 +125,6 @@ class ForecastCurve(object):
         sr_forecast = 'forecast(r_forecastobject, h=h, level=level, fan=fan, robust=robust, ' \
             'find.frequency=find.frequency)'
         return ro.r(sr_forecast)
+
+    def refit(self, ts):
+        logging.fatal("Need to create subtype")

@@ -11,8 +11,16 @@ class holtwinters(ForecastCurve.ForecastCurve):
 
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
-        self.setTimeSeries(period=1)
-        command = self.setREnv("HoltWinter", **kwargs)
+        rtperiod = 1
+        if kwargs.get('period', None) is not None:
+            try:
+                rtperiod = int(kwargs['period'])
+            except:
+                rtperiod = 1
+            kwargs.pop('period')
+
+        self.setTimeSeries(period=rtperiod)
+        command = self.setREnv("HoltWinters", **kwargs)
         return self.fitKernel(command)
 
     def fitKernel(self, command):
@@ -24,7 +32,9 @@ class holtwinters(ForecastCurve.ForecastCurve):
             logging.info("[R]holtwinters ran in {} sec".format(time.time() - start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+            # Holt-Winter returns four columns using fitted.  The first is the fit and the following
+            # columns are the level, trend, and seasonal components.
+            self.fitted = ro.r('fitted(r_forecastobject)[,1]').ravel()  # numpy.ndarray (unraveled to 1D)
             logging.info("HoltWinter fit successful")
         except:
             logging.debug(self.rtracebackerror())
@@ -42,17 +52,23 @@ class holtwinters(ForecastCurve.ForecastCurve):
 
     def fit(self, alpha = None, beta = None, gamma = None, seasonal = ["additive", "multiplicative"],
             start_periods = 2, l_start = None, b_start = None, s_start = None,
-            optim_start = {'alpha' : 0.3, 'beta' : 0.1, 'gamma' : 0.1}) :
+            optim_start = {'alpha' : 0.3, 'beta' : 0.1, 'gamma' : 0.1}, period=None) :
 
-        self.setTimeSeries(period=None)
+        self.setTimeSeries(period=period)
 
-        nperiods = ro.r("frequency(r_timeseries)")
-        nperiods = int(nperiods[0])
-        if nperiods < 2:
+        if period < 2:
             logging.error("Cannot fit HoltWinters on time series with less than 2 periods")
             return self.fitted
+        aargs = self.convertArgsToR(period, alpha, beta, gamma, seasonal, start_periods, l_start, b_start,
+                                    s_start, optim_start)
+        return self.fitR(**aargs)
 
+
+    def convertArgsToR(self, period = None, alpha=None, beta=None, gamma=None, seasonal=["additive", "multiplicative"],
+            start_periods=2, l_start=None, b_start=None, s_start=None,
+            optim_start={'alpha': 0.3, 'beta': 0.1, 'gamma': 0.1}):
         aargs = {}
+        if period is not None: aargs['periods'] = period
         if alpha is not None: aargs['alpha'] = alpha
         if beta is not None: aargs['beta'] = beta
         if gamma is not None: aargs['gamma'] = gamma
@@ -63,12 +79,12 @@ class holtwinters(ForecastCurve.ForecastCurve):
         if b_start is not None: aargs['b.start'] = b_start
         if s_start is not None: aargs['s_start'] = s_start
         aargs['optim.start'] = optim_start
-        return self.fitR(**aargs)
+        return aargs
 
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
                  findfrequency=False):
         # Make the forecast
         fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
-        self.forecasted = self.extractRFcst(fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5})
+        self.forecasted = self.extractRFcst(fcst, indices={'fidx':3, 'nbands':2, 'lower':4, 'upper':5})
         return self.forecasted

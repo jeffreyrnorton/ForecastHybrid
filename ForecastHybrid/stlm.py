@@ -2,6 +2,8 @@ import rpy2.robjects as ro
 import ForecastHybrid.ForecastCurve as ForecastCurve
 import logging
 import time
+from rpy2.robjects import pandas2ri
+import numpy as np
 
 
 class stlm(ForecastCurve.ForecastCurve):
@@ -10,8 +12,19 @@ class stlm(ForecastCurve.ForecastCurve):
 
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
-        self.setTimeSeries(period=None)
-        command = self.setREnv("ets", **kwargs)
+        rtperiod = 1
+        if kwargs.get('period', None) is not None:
+            try:
+                rtperiod = int(kwargs['period'])
+            except:
+                rtperiod = 1
+            kwargs.pop('period')
+        self.setTimeSeries(period=rtperiod)
+        period = ro.r("frequency(r_timeseries)")[0]
+        if period < 2:
+            logging.error("Cannot use STLM fit on time series with period < 2")
+            return self.fitted
+        command = self.setREnv("stlm", **kwargs)
         return self.fitKernel(command)
 
     def fitKernel(self, command):
@@ -24,7 +37,7 @@ class stlm(ForecastCurve.ForecastCurve):
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
             self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
-            logging.info("tbats fit successful")
+            logging.info("stlm fit successful")
         except:
             logging.debug(self.rtracebackerror())
             logging.warning("Running stlm without any arguments except for the time series")
@@ -39,7 +52,7 @@ class stlm(ForecastCurve.ForecastCurve):
 
         return self.fitted
 
-    def fit(self, s_window = 7, robust = False, method = ['ets', 'arima'],
+    def fit(self, period=None, s_window = 7, robust = False, method = ['ets', 'arima'],
             modelfunction = None, model=None, etsmodel = 'ZZN',
             lambday = None, biasadj = None, xreg = None, allow_multiplicative_trend = False):
 
@@ -48,13 +61,16 @@ class stlm(ForecastCurve.ForecastCurve):
         #     zzz = ro.r('stlm(r_timeseries)')
         #     print(k)
         #     print(zzz[1][1][0])
+        aargs = self.convertArgsToR(period, s_window, robust, method, modelfunction, model, etsmodel,
+                            lambday, biasadj, xreg, allow_multiplicative_trend)
+        return self.fitR(**aargs)
 
-        period = ro.r("frequency(r_timeseries)")[0]
-        if period < 2:
-            logging.error("Cannot use STLM fit on time series with period < 2")
-            return self.fitted
+    def convertArgsToR(self, period=None, s_window=7, robust=False, method=['ets', 'arima'],
+            modelfunction=None, model=None, etsmodel='ZZN',
+            lambday=None, biasadj=None, xreg=None, allow_multiplicative_trend=False):
 
         aargs = {}
+        if period is not None: aargs['period'] = period
         aargs['s.window'] = s_window
         aargs['robust'] = robust
         if isinstance(method, list): aargs['method'] = 'ets'
@@ -75,8 +91,8 @@ class stlm(ForecastCurve.ForecastCurve):
         aargs['biasadj'] = biasadj
         #xreg not supported
         aargs['allow.multiplicative.trend'] = allow_multiplicative_trend
+        return aargs
 
-        return self.fitR(**aargs)
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
                  findfrequency=False):
