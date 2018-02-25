@@ -1,15 +1,17 @@
 import numpy as np
 from sklearn import metrics
-from math import sqrt
 import logging
 import pandas as pd
+from sklearn.model_selection import TimeSeriesSplit
+import multiprocessing
+from math import sqrt
 
 
 # A bunch of comments not included
 # Plus - we are going for simple on this I think and then will add...
 class cvts:
 
-    def rolling(self, x, FUN, args, code, window_size=84, num_cores=2, error_method='MSLE'):
+    def rolling(self, x, FUN, args, code, window_size=84, num_cores=2, error_method='MSLE', pool=None):
 
         # No checks on types at this point...
 
@@ -19,56 +21,49 @@ class cvts:
         # We are going to do rolling validation - check args
         # ROLLING
 
-        # Split the series - get number of folds
-        nfolds = int(np.floor(float(len(x))/window_size))
-        logging.info("{} Cross Validation (Rolling): Using {} folds with window size {}".format(
-            code, nfolds, window_size
-        ))
-        accuracies = np.zeros(nfolds-1)
+        h = 1
+        tscv_split = TimeSeriesSplit(max_train_size = None, n_splits=len(x)-h)
 
-        # This is where we will set up the multiprocessing
+        itlist = list()
 
-        # Set up the arguments for each of the nfold-1 arguments
-#        aargs = list()
-        val = float("infinity")
-        best_model = None
-        for i in range(2, nfolds-1):
+        for train_index, test_index in tscv_split.split(x):
+            train_data  = pd.Series(np.asarray(x)[:test_index[0]])
+            if len(train_data) > 4:
+                test_data = pd.Series(np.asarray(x)[test_index[0]:])
+                itlist.append((test_data, train_data, FUN, h, args))
+                # Delete me when the pool goes back in.
+#                cvts_worker(test_data, train_data, FUN, h, args)
 
-            split = window_size*(i-1)
+        own_pool = True if pool is None else False
+        if own_pool is True:
+            pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        self.model_results = np.asarray(pool.starmap(cvts_worker, itlist))
+        if own_pool is True:
+            pool.close()
 
-            logging.info("Before measure, i={}".format(i))
-            index, acc, f = self.measure(i, FUN,
-                                         pd.Series(np.asarray(x)[:split]),
-                                         pd.Series(np.asarray(x)[split:]),
-                                         error_method)
-            logging.info("After measure, i={}, acc={}".format(index, acc))
-
-            if acc < val:
-                val = acc
-                best_model = f
-
-        return {
-            "model_code":code,
-            "model":best_model,
-            "measure":val
-        }
-
-
-    def measure(self, index, FUN, train, test, error_method='RMSE'):
-        f = FUN(train)
-        f.fit()
-        pred = f.forecast(h=len(test))['forecast']
+        # Calculate error
+        tval = self.model_results[:,0]
+        pval = self.model_results[:,1]
 
         if error_method == 'MAE':
-            acc = metrics.mean_absolute_error(test, pred)
+            err = metrics.mean_absolute_error(tval[pd.isnull(pval) == False], pval[pd.isnull(pval) == False])
         elif error_method == 'MSE':
-            acc = metrics.mean_squared_error(test, pred)
+            err = metrics.mean_squared_error(tval[pd.isnull(pval) == False], pval[pd.isnull(pval) == False])
         elif error_method == 'RMSE':
-            acc = sqrt(metrics.mean_squared_error(test, pred))
+            err = sqrt(metrics.mean_squared_error(tval[pd.isnull(pval) == False], pval[pd.isnull(pval) == False]))
         elif error_method == 'MSLE':
-            acc = metrics.mean_squared_log_error(test, pred)
+            err = metrics.mean_squared_log_error(tval[pd.isnull(pval) == False], pval[pd.isnull(pval) == False])
         elif error_method == 'MEAE':
-            acc = metrics.median_absolute_error(test, pred)
-        return index, acc, f
+            err = metrics.median_absolute_error(tval[pd.isnull(pval) == False], pval[pd.isnull(pval) == False])
+
+        return self.model_results, err
 
 
+def cvts_worker(test_data, train_data, FUN, h=1, args=None):
+    fnc = FUN(train_data)
+    fnc.fit() if args is None else fnc.fitR(**args)
+    forecast_data = fnc.forecast(h=h)
+    forecast_point = np.array(forecast_data['forecast'])[h-1]
+#    print("{} : {}".format(test_data.values[h - 1], forecast_point))
+    return test_data.values[h - 1], forecast_point, fnc
+           #train_data.values[len(train_data)-1], fitted_data[len(fitted_data)-1]

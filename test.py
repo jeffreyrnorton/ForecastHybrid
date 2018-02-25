@@ -12,6 +12,13 @@ from sklearn import metrics
 import math
 import logging
 
+from ForecastHybrid import cvts
+from ForecastHybrid import ets
+from ForecastHybrid import tbats
+from ForecastHybrid import thetam
+from ForecastHybrid import nnetar
+
+
 # Read a csv in python...
 bikeData = pd.read_csv('/home/osboxes/Documents/day.csv')
 bikeData.temp = bikeData.temp.astype('float')
@@ -28,13 +35,27 @@ logging.basicConfig(filename='logging.log', level=logging.INFO)
 import matplotlib
 #tsl.plot()
 
+#print("Arima")
+#ar = Arima.Arima(tsl)
+#if ar.fit() is not None:
+#    ar.forecast()
+#ar.fitR(**{'parallel':True, 'num.cores':4})
+
+#cvts = cvts.cvts()
+#for errmtd in ['MAE', 'MSE', 'RMSE', 'MSLE', 'MEAE']:
+#    for mod in [Arima.Arima, ets.ets, tbats.tbats, thetam.thetam, nnetar.nnetar]:
+#        ares = cvts.rolling(tsl, mod, None, 'a', error_method=errmtd)
+    #    pd.Series(ares[0][:,0]).plot()
+    #    pd.Series(ares[0][:,1]).plot()
+#        print("{} Error:{}".format(errmtd, ares[1]))
+
 
 # MSLE looks best for this case
 from ForecastHybrid import HybridForecast
 
 print("MODEL: bike")
 for errormodel in ["MAE", "MSE", "MSLE", "MEAE", "RSME"]:
-    for weightmodel in ['equal', 'errors', 'cv.errors']:
+    for weightmodel in ['cv.errors', 'equal', 'errors']:
         fh = HybridForecast.HybridForecast(ts)
         fitted = fh.fit(weights=weightmodel, error_method=errormodel, models="aefnt")
         equal_error = fh.error('RMSE')
@@ -51,11 +72,7 @@ for errormodel in ["MAE", "MSE", "MSLE", "MEAE", "RSME"]:
 
 asffasdafdsa = 4
 
-print("Arima")
-ar = Arima.Arima(ts)
-if ar.fit() is not None:
-    print(ar.forecast())
-ar.fitR(**{'parallel':True, 'num.cores':4})
+
 
 
 print("STLM")
@@ -71,26 +88,22 @@ if hw.fitR(**{'period':12}) is not None:
     print(hw.forecast())
 
 print("ETS")
-from ForecastHybrid import ets
 ets = ets.ets(ts)
 if ets.fit() is not None:
     print(ets.forecast())
 ets.fitR(**{'model':'ZZZ'})
 
 print("TBATS")
-from ForecastHybrid import tbats
 tb = tbats.tbats(ts)
 if tb.fit() is not None:
     print(tb.forecast())
 
 print("NNETAR")
-from ForecastHybrid import nnetar
 nn = nnetar.nnetar(ts)
 if nn.fit() is not None:
     print(nn.forecast())
 
 print("THETAM")
-from ForecastHybrid import thetam
 theta = thetam.thetam(ts)
 if theta.fit() is not None:
     print(theta.forecast())

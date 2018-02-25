@@ -25,7 +25,7 @@ class tbats(ForecastCurve.ForecastCurve):
             logging.info("[R]tbats ran in {} sec".format(time.time() - start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+            self.extractFit(indices={'fidx':1, 'nbands':2, 'lower':6, 'upper':5})
             logging.info("tbats fit successful")
         except:
             logging.debug(self.rtracebackerror())
@@ -35,7 +35,7 @@ class tbats(ForecastCurve.ForecastCurve):
                 self.r_forecastobject = ro.r(command)
                 ro.globalenv['r_forecastobject'] = self.r_forecastobject
                 # Fitted points
-                self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+                self.extractFit(indices={'fidx': 1, 'nbands': 2, 'lower': 6, 'upper': 5})
             except:
                 logging.error("Failure to fit data with tbats")
 

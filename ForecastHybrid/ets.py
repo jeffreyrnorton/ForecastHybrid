@@ -32,8 +32,9 @@ class ets(ForecastCurve.ForecastCurve):
             logging.info("[R]ets ran in {} sec".format(time.time() - start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
-            py_rep = dict(zip(self.r_forecastobject.names, list(self.r_forecastobject)))
+            self.extractFit(indices={'fidx': 1, 'nbands': 2, 'lower': 4, 'upper': 5})
+
+#            py_rep = dict(zip(self.r_forecastobject.names, list(self.r_forecastobject)))
 
             # Extract out the model
 
@@ -46,7 +47,7 @@ class ets(ForecastCurve.ForecastCurve):
                 self.r_forecastobject = ro.r(command)
                 ro.globalenv['r_forecastobject'] = self.r_forecastobject
                 # Fitted points
-                self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+                self.extractFit(indices={'fidx': 1, 'nbands': 2, 'lower': 4, 'upper': 5})
             except:
                 logging.error("Failure to fit data with ets")
 

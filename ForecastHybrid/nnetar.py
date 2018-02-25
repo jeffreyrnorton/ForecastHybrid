@@ -25,7 +25,7 @@ class nnetar(ForecastCurve.ForecastCurve):
             logging.info("[R]nnetar ran in {} sec".format(time.time() - start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+            self.extractFit(indices={'fidx':15, 'nbands':None, 'lower':None, 'upper':None})
             logging.info("nnetar fit successful")
         except:
             logging.debug(self.rtracebackerror())
@@ -35,7 +35,7 @@ class nnetar(ForecastCurve.ForecastCurve):
                 self.r_forecastobject = ro.r(command)
                 ro.globalenv['r_forecastobject'] = self.r_forecastobject
                 # Fitted points
-                self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+                self.extractFit(indices={'fidx': 15, 'nbands': None, 'lower': None, 'upper': None})
             except:
                 logging.error("Failure to fit data with nnetar")
 

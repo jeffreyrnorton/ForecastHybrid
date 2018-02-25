@@ -330,29 +330,40 @@ class HybridForecast(ForecastCurve.ForecastCurve):
 
         if weights == 'cv.errors':  # cv.errors
             try: # There are reasons for exceptions like a list too short for stlm.  We will handle it robustly
-                itlist = list()
-                if 't' in expanded_models:
-                    itlist.append((self.ts, tbats.tbats, atomic_arguments, 't', window_size, 2, error_method))
-                if 'n' in expanded_models:
-                    itlist.append((self.ts, nnetar.nnetar, atomic_arguments, 'n', window_size, 2, error_method))
-                if 'a' in expanded_models:
-                    itlist.append((self.ts, Arima.Arima, atomic_arguments, 'a', window_size, 2, error_method))
-                if 'e' in expanded_models:
-                    itlist.append((self.ts, ets.ets, atomic_arguments, 'e', window_size, 2, error_method))
-                if 'f' in expanded_models:
-                    itlist.append((self.ts, thetam.thetam, atomic_arguments, 'f', window_size, 2, error_method))
-                if 's' in expanded_models:
-                    itlist.append((self.ts, stlm.stlm, atomic_arguments, 's', window_size, 2, error_method))
-                if 'h' in expanded_models:
-                    atomic_arguments['h']['model'] = 'MAM'
-                    itlist.append((self.ts, ets.ets, atomic_arguments, 'h', window_size, 2, error_method))
-                if 'd' in expanded_models:
-                    atomic_arguments['d']['model'] = 'AAA'
-                    itlist.append((self.ts, ets.ets, atomic_arguments, 'd', window_size, 2, error_method))
+
+                rolling = cvts.cvts()
 
                 pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-                self.model_results = pool.starmap(cvts_worker, itlist)
-                pool.close()
+
+                rolling_results = list()
+                if 't' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, tbats.tbats, args=None, code='t', error_method=error_method, pool=pool))
+                if 'n' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, nnetar.nnetar, args=None, code='n', error_method=error_method, pool=pool))
+                if 'a' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, Arima.Arima, args=None, code='a', error_method=error_method, pool=pool))
+                if 'e' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, ets.ets, args=None, code='e', error_method=error_method, pool=pool))
+                if 'f' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, thetam.thetam, args=None, code='f', error_method=error_method, pool=pool))
+                if 's' in expanded_models:
+                    rolling_results.append(
+                        rolling.rolling(self.ts, stlm.stlm, args=None, code='s', error_method=error_method, pool=pool))
+                if 'h' in expanded_models:
+                    atomic_arguments['h']['model'] = 'MAM'
+                    rolling_results.append(
+                        rolling.rolling(self.ts, ets.ets, args=atomic_arguments['h'], code='h',
+                                        error_method=error_method, pool=pool))
+                if 'd' in expanded_models:
+                    atomic_arguments['d']['model'] = 'AAA'
+                    rolling_results.append(
+                        rolling.rolling(self.ts, ets.ets, args=atomic_arguments['d'], code='d',
+                                        error_method=error_method, pool=pool))
 
                 # Turn the array in model results into a dictionary (map) and extract even weighting...
                 # Also, sometimes we are going to get NaNs so we are going to have to work with a dataframe

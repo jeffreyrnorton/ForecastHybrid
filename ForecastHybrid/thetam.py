@@ -72,7 +72,7 @@ class thetam(ForecastCurve.ForecastCurve):
 
             logging.info("[R]thetam ran in {} sec".format(time.time()-start_time))
             # Fitted points
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel() # numpy.ndarray (unraveled to 1D)
+            self.extractFit(indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5})
             logging.info("thetam fit successful")
         except:
             logging.debug(self.rtracebackerror())

@@ -1,26 +1,25 @@
-import rpy2.robjects as ro
-from rpy2.robjects import pandas2ri
 import numpy as np
 from rpy2.robjects import pandas2ri
 import statsmodels.api as sm
 from scipy.signal import welch
-import random
-import string
 import logging
 import rpy2.robjects as ro
+import pandas as pd
 
 
 class ForecastCurve(object):
     def __init__(self, timeseries):
-        self.ts = timeseries
+        self.ts = timeseries     # Original data
         self.r_forecastobject = None
-        self.fitted = None
+        self.fitted = None       # Data that will be fit (drop the first point): len(self.ts)-1
+        self.x = None            # The fit of len(self.ts)-1.
         self.forecasted = None
+        ro.r('suppressPackageStartupMessages(library(forecast))')
         pandas2ri.activate()
-        ro.r('library(forecast)')
 
-    def __del__(self):
-        pandas2ri.deactivate()
+
+    #def __del__(self):
+        #pandas2ri.deactivate()
 
     def rtracebackerror(self):
         return ro.r('toString(traceback(max.lines=1)[1])')[0]
@@ -77,11 +76,33 @@ class ForecastCurve(object):
         command = 'r_timeseries <- ts(r_timeseries, frequency=' + str(period) + ')'
         ro.r(command)
 
+    def extractFit(self, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5}, offset=1):
+        # It appears that the fit (and the forecast) always lag the true data by one
+        # This really appears to be an error in the R libraries because I noticed it in
+        # the pure R implementation as well.  So we have to play tricks in both the
+        # fit and the forecast to align to the data.
+        # First, forecast just one point
+
+        rvec = np.asarray(ro.r('r_forecastobject$fitted')).ravel()
+        data = rvec[1:]
+        date = self.ts.index[1:]
+        self.fitted = pd.Series(data=data, index=date)
+
+
     def extractRFcst(self, fcst, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5}):
+
         nprres = np.asarray(fcst)
         # Build a dictionary (map) of the forecast output
         vfor = np.asarray(nprres[indices['fidx']])
-        results = {'forecast':vfor}
+
+        # Build a time index for the future.
+        average_period = np.ediff1d(self.ts.index).mean()
+        last_date = self.ts.index[len(self.ts) - 1]
+        idx = np.arange(start=last_date+average_period, step=average_period,
+                        stop =last_date+average_period + (len(vfor)+1)*average_period)
+        idx = idx[0:len(vfor)]
+
+        results = {'forecast':pd.Series(index=idx, data=vfor)}
 
         try:
             if indices['nbands'] is not None:
@@ -105,8 +126,8 @@ class ForecastCurve(object):
                 for i in range(0, len(nprres[2])):
                     k1 = str(nprres[2][i])+'_lower'
                     k2 = str(nprres[2][i])+'_upper'
-                    results[k1] = arrlower[i]
-                    results[k2] = arrupper[i]
+                    results[k1] = pd.Series(index=idx, data=arrlower[i][:len(idx)])
+                    results[k2] = pd.Series(index=idx, data=arrupper[i][:len(idx)])
         except:
             logging.error("Unable to retrieve confidence levels for type" + str(type(self)))
 

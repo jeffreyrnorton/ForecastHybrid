@@ -4,6 +4,8 @@ import logging
 import time
 from rpy2.robjects import pandas2ri
 import numpy as np
+import traceback
+import pandas as pd
 
 
 # Arima is a wrapper on the R function auto.arima
@@ -27,11 +29,12 @@ class Arima(ForecastCurve.ForecastCurve):
             self.r_forecastobject = ro.r(command)
             logging.info("[R]auto.arima ran in {} sec".format(time.time()-start_time))
             ro.globalenv['r_forecastobject'] = self.r_forecastobject
-            self.fitted = ro.r('fitted(r_forecastobject)').ravel()  # numpy.ndarray (unraveled to 1D)
+            self.extractFit(indices={'fidx':3, 'nbands':2, 'lower':4, 'upper':5})
             # Orders
-            [self.p, self.d, self.q] = ro.r('arimaorder(r_forecastobject)').ravel()  # numpy.ndarray
+            [self.p, self.d, self.q] = np.asarray(ro.r('arimaorder(r_forecastobject)')).ravel()  # numpy.ndarray
             logging.info("auto.arima fit successful")
         except:
+            traceback.print_exc()
             logging.debug(self.rtracebackerror())
             logging.warning("Running auto.arima without any arguments except for the time series")
             try:
@@ -39,7 +42,7 @@ class Arima(ForecastCurve.ForecastCurve):
                 self.r_forecastobject = ro.r(command)
                 ro.globalenv['r_forecastobject'] = self.r_forecastobject
                 logging.info("auto.arima successful")        # Fitted points
-                self.fitted = ro.r('fitted(r_forecastobject)').ravel() # numpy.ndarray (unraveled to 1D)
+                self.extractFit(indices={'fidx': 3, 'nbands': 2, 'lower': 4, 'upper': 5})
                 # Orders
                 [self.p, self.d, self.q] = ro.r('arimaorder(r_forecastobject)').ravel() # numpy.ndarray
                 logging.info("auto.arima successful with only time series")
@@ -61,7 +64,7 @@ class Arima(ForecastCurve.ForecastCurve):
 
         self.setTimeSeries(period=1)
         if approximation is None:
-            rapprox = ro.r("length(r_timeseries) > 150 | frequency(r_timeseries) > 12").ravel()
+            rapprox = np.asarray(ro.r("length(r_timeseries) > 150 | frequency(r_timeseries) > 12")).ravel()
             approximation = bool(rapprox[0] == 1)
 
         aargs = self.convertArgsToR(d, D, maxp, maxq, maxP, maxQ, maxorder,
@@ -129,6 +132,7 @@ class Arima(ForecastCurve.ForecastCurve):
 
     def forecast(self, h=5, level=[80,95], fan=False, robust=False, lambdav=None,
                  findfrequency=False):
+        # Arima shift is one - tends to be one for most types
         # Make the forecast
         fcst = self.rforecast(h, level, fan, robust, lambdav, findfrequency)
         self.forecasted = self.extractRFcst(fcst, indices={'fidx':3, 'nbands':2, 'lower':4, 'upper':5})
