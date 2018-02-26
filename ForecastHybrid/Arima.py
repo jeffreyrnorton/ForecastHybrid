@@ -15,6 +15,9 @@ class Arima(ForecastCurve.ForecastCurve):
         super().__init__(timeseries)
         self.p = self.d = self.q = None
 
+    def myname(self):
+        return "auto.arima"
+
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
         self.setTimeSeries(period=1)
@@ -73,7 +76,6 @@ class Arima(ForecastCurve.ForecastCurve):
                                     approximation, truncate, xreg, test, seasonaltest,
                                     allowdrift, allowmean, lambdav, biasadj, parallel, numcores)
         command = self.setREnv("auto.arima", **aargs)
-
         return self.fitKernel(command)
 
     def convertArgsToR(self, d = None, D = None, maxp = 5, maxq = 5, maxP = 2,

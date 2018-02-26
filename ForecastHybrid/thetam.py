@@ -13,6 +13,9 @@ class thetam(ForecastCurve.ForecastCurve):
         super().__init__(timeseries)
         ro.r("library(stats)")
 
+    def myname(self):
+        return "thetam"
+
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
         self.setTimeSeries(period=1)

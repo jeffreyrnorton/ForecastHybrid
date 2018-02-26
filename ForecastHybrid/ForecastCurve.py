@@ -17,9 +17,19 @@ class ForecastCurve(object):
         ro.r('suppressPackageStartupMessages(library(forecast))')
         pandas2ri.activate()
 
+    def myname(self):
+        return ""
+
 
     #def __del__(self):
         #pandas2ri.deactivate()
+
+    def fitR(self, **kwargs):
+        logging.error("Subtype this")
+
+    def generateRForCVTS(self, command, namets="y", funcname="hfTSFIT"):
+        fnc = "{} <- function({}) {}".format(funcname, namets, command)
+        ro.r(fnc)
 
     def rtracebackerror(self):
         return ro.r('toString(traceback(max.lines=1)[1])')[0]
@@ -30,50 +40,62 @@ class ForecastCurve(object):
                 logging.debug('{}:{}'.format(ritem, ro.r[ritem]))
             logging.debug('Running R command:{}'.format(command))
 
-    def setREnv(self, call, **kwargs):
-        command = '{}(r_timeseries'.format(call)
+    def setREnv(self, call, tsname='r_timeseries', inline=False, **kwargs):
+        command = '{}({}'.format(call, tsname)
         for key, item in kwargs.items():
             if isinstance(item, bool):
-                ro.globalenv[key] = ro.rinterface.TRUE if item else ro.rinterface.FALSE
+                if inline: rinline = "TRUE" if item else "FALSE"
+                else: ro.globalenv[key] = ro.rinterface.TRUE if item else ro.rinterface.FALSE
             elif isinstance(item, list) and all(isinstance(x, float) for x in item):
-                ro.globalenv[key] = pandas2ri.FloatSexpVector(item)
+                if inline: rinline = item # This is not yet correct!
+                else: ro.globalenv[key] = pandas2ri.FloatSexpVector(item)
             elif isinstance(item, list) and all(isinstance(x, int) for x in item):
+                rinline = None
                 ro.globalenv[key] = pandas2ri.IntSexpVector(item)
             elif isinstance(item, dict):
+                rinline = None
                 ro.globalenv[key] = ro.ListVector(item)
             else:
                 try:
-                    ro.globalenv[key] = item
+                    if inline is False: ro.globalenv[key] = item
+                    else:
+                        if isinstance(item, str): rinline = '\"'+item+'\"'
+                        else: rinline = item
                 except:
                     logging.error('Variable {} - Traceback - {}'.format(key, self.rtracebackerror()))
 
-            command += ", {}={}".format(key,key)
+            if inline: command += ", {}={}".format(key, rinline)
+            else: command += ", {}={}".format(key,key)
         command += ")"
         return command
 
-    def setTimeSeries(self, period=None):
+    def setTimeSeries(self, period=None, rtsname='r_timeseries', tts=None):
+
+        if tts is None:
+            tts = self.ts
 
         # Convert the Python time series to an R time series
-        rdf = pandas2ri.py2ri(self.ts)
+        rdf = pandas2ri.py2ri(tts)
         # Create a call string setting variables as necessary
-        ro.globalenv['r_timeseries'] = rdf
+        ro.globalenv[rtsname] = rdf
 
         if period is None:
-            try:
-                # Decompose into STL
-                stl = sm.tsa.seasonal_decompose(self.ts)
-                # Use Welch to calculate period on seasonal part of time series
-                fs, Pxx = welch(stl.seasonal, fs=len(stl.seasonal), nperseg=len(stl.seasonal))
-                period = int(np.round(np.mean(np.ediff1d(np.asarray(fs)))))
-                # The above may not be correct - what we are trying to do is minimize AIC on fit
-            except Exception as e:
-                period = 1 # Safe, but cannot do STLM or other seasonal methods
-                ro.r('library(stats)')
-                period = ro.r('stl(r_timeseries)')
-                logging.warning(str(e))
+            period=1
+            # try:
+            #     # Decompose into STL
+            #     stl = sm.tsa.seasonal_decompose(self.ts)
+            #     # Use Welch to calculate period on seasonal part of time series
+            #     fs, Pxx = welch(stl.seasonal, fs=len(stl.seasonal), nperseg=len(stl.seasonal))
+            #     period = int(np.round(np.mean(np.ediff1d(np.asarray(fs)))))
+            #     # The above may not be correct - what we are trying to do is minimize AIC on fit
+            # except Exception as e:
+            #     period = 1 # Safe, but cannot do STLM or other seasonal methods
+            #     ro.r('library(stats)')
+            #     period = ro.r('stl({})'.format(rtsname))
+            #     logging.warning(str(e))
 
         # Add frequency to the time series - must be greater than 1 to make stlm work
-        command = 'r_timeseries <- ts(r_timeseries, frequency=' + str(period) + ')'
+        command = '{} <- ts({}, frequency={})'.format(rtsname, rtsname, period)
         ro.r(command)
 
     def extractFit(self, indices={'fidx':1, 'nbands':2, 'lower':4, 'upper':5}, offset=1):

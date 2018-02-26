@@ -30,13 +30,18 @@ accdata = pd.read_csv('/home/osboxes/Documents/USAccDeaths.csv')
 accdata.USAccDeaths = accdata.USAccDeaths.astype('float')
 tsl = pd.Series(index=accdata.time, data=accdata.USAccDeaths.values)
 
-logging.basicConfig(filename='logging.log', level=logging.INFO)
+logging.basicConfig(filename='logging.log', level=logging.WARNING)
 
 import matplotlib
 #tsl.plot()
 
-#print("Arima")
-#ar = Arima.Arima(tsl)
+rcvts = cvts.cvts()
+curve = ets.ets(tsl)
+rcvts.RcvtsWrapper(tsl, curve, windowSize=len(tsl)/4, ncores=6, **{"model": "ZZZ"})
+
+print("Arima")
+ar = Arima.Arima(tsl)
+
 #if ar.fit() is not None:
 #    ar.forecast()
 #ar.fitR(**{'parallel':True, 'num.cores':4})

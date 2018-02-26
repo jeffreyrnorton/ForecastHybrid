@@ -10,6 +10,9 @@ class tbats(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
         super().__init__(timeseries)
 
+    def myname(self):
+        return "tbats"
+
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
         self.setTimeSeries(period=1)

@@ -10,6 +10,9 @@ class nnetar(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
         super().__init__(timeseries)
 
+    def myname(self):
+        return "nnetar"
+
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
         self.setTimeSeries(period=1)

@@ -10,6 +10,9 @@ class ets(ForecastCurve.ForecastCurve):
     def __init__(self, timeseries):
         super().__init__(timeseries)
 
+    def myname(self):
+        return "ets"
+
     def fitR(self, **kwargs):
         ro.r("rm(list=ls())")
         rtperiod = 1

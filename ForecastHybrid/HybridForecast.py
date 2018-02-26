@@ -331,6 +331,15 @@ class HybridForecast(ForecastCurve.ForecastCurve):
         if weights == 'cv.errors':  # cv.errors
             try: # There are reasons for exceptions like a list too short for stlm.  We will handle it robustly
 
+
+                ## Wrapper on type of R
+                rcvts = cvts.cvts()
+
+                rcvts.RcvtsWrapper(ets.ets(), {"model":"ZZZ"})
+
+
+                ## ROLLING METHOD - slow
+
                 rolling = cvts.cvts()
 
                 pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
