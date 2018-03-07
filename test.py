@@ -36,8 +36,8 @@ import matplotlib
 #tsl.plot()
 
 rcvts = cvts.cvts()
-curve = ets.ets(tsl)
-rcvts.RcvtsWrapper(tsl, curve, windowSize=len(tsl)/4, ncores=6, **{"model": "ZZZ"})
+pcvts = rcvts.cvtsp(tsl, FUN=ets.ets, rolling=False, windowSize=len(tsl)/4, maxHorizon=5 )
+#rcvts.RcvtsWrapper(tsl, curve, windowSize=len(tsl)/4, ncores=6, **{"model": "ZZZ"})
 
 print("Arima")
 ar = Arima.Arima(tsl)

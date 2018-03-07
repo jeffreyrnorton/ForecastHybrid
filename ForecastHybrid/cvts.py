@@ -7,6 +7,11 @@ import multiprocessing
 from math import sqrt
 import rpy2.robjects as ro
 
+# Note that seq(start,end) for indices will be
+# np.linspace(start=start, end=end, num=end-start+1, dtype=int)
+def p_seq(start, end):
+    return(np.linspace(start=start, stop=end, num=end-start+1, dtype=int))
+
 
 # A bunch of comments not included
 # Plus - we are going for simple on this I think and then will add...
@@ -59,6 +64,7 @@ class cvts:
 
         return self.model_results, err
 
+
     def RcvtsWrapper(self, x, curve, windowSize, ncores=2, **kwargs):
 
         windowSize = int(windowSize)
@@ -88,6 +94,7 @@ class cvts:
         except:
             logging.error(curve.rtracebackerror())
         return None
+
 
     ## cvts.R from HybridForecast R package as of Feb 2018
     def cvtsRSource(self):
@@ -320,6 +327,33 @@ class cvts:
 
         """
 
+    ### Python translation of cvts.R
+    def cvtsp(self, x, FUN, thread_pool=None,
+              rolling=False, windowSize=84, maxHorizon=5,
+              horizonAverage=False, saveModels=False,
+              saveForecasts=False, num_cores=2, **kwargs):
+
+        windowSize = int(windowSize)
+        # A bunch of checking ...
+
+        # Check if fitting function accepts xreg when xreg is not None
+
+        slices = tsPartition(x, rolling, windowSize, maxHorizon)
+
+        if thread_pool is None:
+            thread_pool = multiprocessing.Pool(processes=
+                                               min(len(slices), multiprocessing.cpu_count()))
+
+        itlist = list()
+        function_args = None if kwargs is None else dict(**kwargs)
+
+        for slice in slices:
+            itlist.append((x, FUN, slice, maxHorizon, saveModels, saveForecasts, function_args))
+
+        # I think we want to set chunk size to limit the number of threads used, but not sure yet.
+        cvts_results = np.asarray(thread_pool.starmap(cvtsp_worker, itlist))
+
+        return None
 
 def cvts_worker(test_data, train_data, FUN, h=1, args=None):
     fnc = FUN(train_data)
@@ -330,3 +364,55 @@ def cvts_worker(test_data, train_data, FUN, h=1, args=None):
     return test_data.values[h - 1], forecast_point, fnc
            #train_data.values[len(train_data)-1], fitted_data[len(fitted_data)-1]
 
+
+def tsPartition(x, rolling, windowSize, maxHorizon):
+    numPartitions = len(x) - windowSize - maxHorizon + 1 if rolling \
+        else int((len(x) - windowSize)/maxHorizon)
+    slices = []
+    start = 0
+    last = None
+    for i in range(0, numPartitions):
+        if rolling:
+            trainIndices = [start, start+windowSize-1]
+            testIndices  = [start+windowSize, min(start+windowSize+maxHorizon-1, len(x)-1)]
+            start += 1
+        else:
+            if last is None: last = start + windowSize - 1
+            trainIndices = [start, last]
+            last += maxHorizon
+            testIndices  = [trainIndices[1]+1, last]
+        slices.append({'trainIndices':trainIndices, 'testIndices':testIndices})
+    return slices
+
+
+# Not supporting xreg at this time...
+def cvtsp_worker(x, FUN, slice, maxHorizon, saveModels=False, saveForecasts=False, function_args=None):
+    trainIndices = slice['trainIndices']
+    testIndices  = slice['testIndices']
+
+    def tsSubsetWithIndices(x, indices):
+        xtime = x.copy()
+        minIndex = min(indices)
+        maxIndex = max(indices)
+        if maxIndex > len(x):
+            logging.warning("Max subset index cannot exceed time series length")
+            return None
+        return xtime.iloc[minIndex:maxIndex + 1]
+
+    tsTrain = tsSubsetWithIndices(x, trainIndices)
+    tsTest  = tsSubsetWithIndices(x, testIndices)
+
+    fnc = FUN(tsTrain)
+    fc = None
+    if fnc.fitR(**function_args) is not None:
+        logging.warning("Could not calculate fit with model")
+        fc = fnc.forecast(h=maxHorizon)
+
+    results = {}
+    if saveModels:
+        results['model'] = fnc
+    if fc is not None:
+        if saveForecasts:
+            results['forecast'] = fc
+        results['resids'] = tsTest.values - fc['forecast']
+    return results
